@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SOC Agent — Python Dependencies
+# Python 3.12 required
+#
+# Install:         pip install -r backend/requirements.txt
+# Upgrade package: pip install --upgrade <package>, then pin the new version here
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1          # [standard] includes websocket + hot-reload support
+
+# ── Database ──────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.36                 # async ORM — must be 2.x, not 1.x
+asyncpg==0.30.0                    # async PostgreSQL driver for SQLAlchemy
+alembic==1.14.0                    # database migrations
+
+# ── Redis ─────────────────────────────────────────────────────────────────────
+redis==5.2.1                       # redis-py with asyncio support (import redis.asyncio)
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+httpx==0.28.0                      # async HTTP for all external API calls + test client
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+apscheduler==3.10.4                # background polling jobs (A1 scheduler)
+
+# ── Validation / config ───────────────────────────────────────────────────────
+pydantic==2.10.3                   # v2 — data validation and serialisation
+pydantic-settings==2.6.1           # BaseSettings for config.py (reads .env)
+python-dotenv==1.0.1               # .env file loading (used by pydantic-settings)
+
+# ── STIX 2.1 ─────────────────────────────────────────────────────────────────
+stix2==3.0.1                       # STIX 2.1 bundle creation (utils/stix_normaliser.py)
+
+# ── LangGraph / LangChain ─────────────────────────────────────────────────────
+langgraph==0.2.56                  # multi-agent pipeline graph (agents/pipeline.py)
+langchain-core==0.3.25             # shared LangChain primitives
+
+# ── Anthropic (Member 2 — A4 Planner) ────────────────────────────────────────
+anthropic==0.40.0                  # Claude API client (services/anthropic_client.py)
+
+# ── PDF generation (Member 3 — A5 Reporter) ───────────────────────────────────
+reportlab==4.2.5                   # PDF report generation
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-multipart==0.0.19           # multipart form data parsing for FastAPI uploads
+structlog==24.4.0                  # structured JSON logging across all agents
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
