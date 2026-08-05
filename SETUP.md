@@ -72,14 +72,14 @@ NVD_API_KEY=your_nvd_key                # optional but recommended
 ## Step 3 — Start the infrastructure containers
 
 ```bash
-docker compose -f docker-compose.infra.yml up -d
+docker compose up -d
 ```
 
 This starts PostgreSQL 16 and Redis 7 in the background.
 
 Verify both are healthy:
 ```bash
-docker compose -f docker-compose.infra.yml ps
+docker compose ps
 ```
 Both services should show `healthy` in the Status column. If they show `starting`, wait 10 seconds and run `ps` again.
 
@@ -107,7 +107,7 @@ Your terminal prompt should now show `(.venv)`.
 ## Step 5 — Install Python dependencies
 
 ```bash
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 ```
 
 ---
@@ -156,7 +156,7 @@ Visit http://localhost:8000/docs — you should see the FastAPI Swagger UI.
 
 Start pgAdmin (PostgreSQL browser) and Redis Commander with:
 ```bash
-docker compose -f docker-compose.infra.yml --profile tools up -d
+docker compose --profile tools up -d
 ```
 
 | Tool | URL | Credentials |
@@ -217,7 +217,7 @@ Scope examples: `a1`, `a2`, `a3`, `a4`, `a5`, `db`, `config`, `scheduler`
 
 ```bash
 # Start infrastructure (if not already running)
-docker compose -f docker-compose.infra.yml up -d
+docker compose up -d
 
 # Activate venv
 source .venv/bin/activate      # Mac/Linux
@@ -231,7 +231,7 @@ alembic upgrade head
 uvicorn backend.main:app --reload
 
 # When done for the day — stop containers to free memory
-docker compose -f docker-compose.infra.yml stop
+docker compose stop
 ```
 
 ---
@@ -240,8 +240,8 @@ docker compose -f docker-compose.infra.yml stop
 
 ```bash
 # View logs from PostgreSQL or Redis
-docker compose -f docker-compose.infra.yml logs postgres
-docker compose -f docker-compose.infra.yml logs redis
+docker compose logs postgres
+docker compose logs redis
 
 # Open a psql shell
 docker exec -it soc_postgres psql -U soc_user -d soc_db
@@ -253,7 +253,7 @@ docker exec -it soc_redis redis-cli -a your_redis_password
 docker exec -it soc_redis redis-cli -a your_redis_password LRANGE cve_pipeline_queue 0 -1
 
 # Wipe ALL data and start fresh (destructive!)
-docker compose -f docker-compose.infra.yml down -v
+docker compose down -v
 alembic upgrade head
 
 # Pull latest code and apply new migrations
@@ -277,8 +277,8 @@ git checkout -- .
 **Port already in use:**
 Change `POSTGRES_PORT` or `REDIS_PORT` in your `.env` (e.g. to `5433` or `6380`) and restart the containers:
 ```bash
-docker compose -f docker-compose.infra.yml down
-docker compose -f docker-compose.infra.yml up -d
+docker compose down
+docker compose up -d
 ```
 
 **`alembic: command not found`:**
@@ -287,9 +287,9 @@ Your venv is not activated. Run `source .venv/bin/activate` first, then retry.
 **`asyncpg: cannot connect` / `Connection refused`:**
 The Docker containers are not running or not yet healthy.
 ```bash
-docker compose -f docker-compose.infra.yml ps          # check status
-docker compose -f docker-compose.infra.yml up -d       # start if stopped
-docker compose -f docker-compose.infra.yml logs postgres  # check for errors
+docker compose ps          # check status
+docker compose up -d       # start if stopped
+docker compose logs postgres  # check for errors
 ```
 Also confirm your `DATABASE_URL` password matches `POSTGRES_PASSWORD` in `.env`.
 

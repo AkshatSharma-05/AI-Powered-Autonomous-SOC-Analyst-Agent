@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SOC Agent — docker-compose.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Starts ALL services with a single command:
+#   docker compose up -d          → start everything in background
+#   docker compose up             → start with logs attached
+#   docker compose down           → stop and remove containers
+#   docker compose down -v        → stop, remove containers AND wipe volumes (destructive!)
+#   docker compose --profile tools up -d  → also start pgAdmin + Redis Commander
+#
+# Spec R1: ALL THREE services (backend, postgres, redis) must be healthy
+# within 30 seconds of `docker compose up`.
+#
+# FIRST-TIME SETUP:
+#   1. cp .env.example .env  — fill in your passwords
+#   2. docker compose up -d
+#   3. docker compose exec backend alembic upgrade head  — run DB migrations
+#   4. docker compose exec backend python scripts/seed_assets.py  — seed inventory
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine          # alpine = smaller image, same functionality
+    container_name: soc_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-soc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soc_password}
+      POSTGRES_DB: ${POSTGRES_DB:-soc_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"  # exposed to host for local tooling (psql, TablePlus)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+        # ^ runs ONCE on first container creation — enables pgcrypto, pg_trgm, btree_gin
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-soc_user} -d ${POSTGRES_DB:-soc_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - soc_network
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: soc_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-soc_redis_password}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-soc_redis_password}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - soc_network
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soc_backend
+    restart: unless-stopped
+    env_file:
+      - .env                           # reads DATABASE_URL, REDIS_URL, etc.
+    environment:
+      # Override DATABASE_URL to use the Docker service name ('postgres'), not localhost
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-soc_user}:${POSTGRES_PASSWORD:-soc_password}@postgres:5432/${POSTGRES_DB:-soc_db}
+      # Override REDIS_URL similarly
+      REDIS_URL: redis://:${REDIS_PASSWORD:-soc_redis_password}@redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy    # only start after Postgres is accepting connections
+      redis:
+        condition: service_healthy    # only start after Redis is accepting connections
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s              # give uvicorn time to start before first check
+    networks:
+      - soc_network
+
+  # ── Next.js Frontend ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_dummy_key_for_v0_skeleton}
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: soc_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_dummy_key_for_v0_skeleton}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-sk_test_dummy_key_for_v0_skeleton}
+      NEXT_PUBLIC_API_URL: http://localhost:8000   # backend URL as seen by the browser
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - soc_network
+
+
+  # ── pgAdmin 4 (optional) ─────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: soc_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@soc.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}   # fixed: was incorrectly PGADMIN_EMAIL
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - soc_network
+    profiles:
+      - tools                          # docker compose --profile tools up -d
+
+  # ── Redis Commander (optional) ────────────────────────────────────────────────
+  redis_commander:
+    image: rediscommander/redis-commander:latest
+    container_name: soc_redis_ui
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379:0:${REDIS_PASSWORD:-soc_redis_password}"
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - soc_network
+    profiles:
+      - tools
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Named volumes — survive `docker compose down` but NOT `down -v`
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  soc_network:
+    driver: bridge
+    name: soc_network

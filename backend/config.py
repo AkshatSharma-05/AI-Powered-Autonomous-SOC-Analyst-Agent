@@ -178,8 +178,8 @@ class Settings(BaseSettings):
     # GitHub  (Advisory + Code Search)
     # ─────────────────────────────────────────────────────────────────────────
 
-    github_token: str = Field(
-        ...,
+    github_token: str | None = Field(
+        default=None,
         description=(
             "GitHub Personal Access Token.  Required for Advisory GraphQL API "
             "(read:packages, read:org scopes) and Code Search API (A3).  "
