@@ -52,7 +52,8 @@ router = APIRouter(prefix="/cves", tags=["CVEs"])
     response_model=PaginatedCVEResponse,
     summary="Paginated CVE feed",
     description=(
-        "Returns CVEs ordered by published_date DESC (newest first). "
+        "Returns CVEs ordered by risk_score DESC by default (highest-risk first). "
+        "Supports sort_by param: risk_score | published_date | cvss_score. "
         "Includes exploit_status and risk_score for dashboard display (R17, R20)."
     ),
 )
@@ -64,11 +65,22 @@ async def list_cves(
         description="Filter by exploit status: 'None' | 'PoC Exists' | 'Weaponised' | 'Actively Exploited'",
     ),
     min_cvss: Optional[float] = Query(None, ge=0.0, le=10.0, description="Minimum CVSS score filter"),
+    sort_by: Optional[str] = Query(
+        "risk_score",
+        description="Sort field: 'risk_score' (default) | 'published_date' | 'cvss_score'",
+    ),
 ) -> PaginatedCVEResponse:
-    """GET /cves — paginated CVE list, newest first (R17, R20)."""
+    """GET /cves — paginated CVE list, highest risk first by default (R17, R20)."""
     async with get_async_session() as session:
-        # Build query
-        query = select(CVE).order_by(CVE.published_date.desc().nulls_last(), CVE.created_at.desc())
+        # Build ordering — default to risk_score DESC so page 1 always shows
+        # the most critical CVEs rather than just the most recently published ones.
+        _sort_map = {
+            "risk_score": CVE.risk_score.desc().nulls_last(),
+            "published_date": CVE.published_date.desc().nulls_last(),
+            "cvss_score": CVE.cvss_score.desc().nulls_last(),
+        }
+        primary_order = _sort_map.get(sort_by or "risk_score", CVE.risk_score.desc().nulls_last())
+        query = select(CVE).order_by(primary_order, CVE.created_at.desc())
 
         if exploit_status:
             query = query.where(CVE.exploit_status == exploit_status)
