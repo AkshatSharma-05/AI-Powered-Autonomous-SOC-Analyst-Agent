@@ -249,10 +249,19 @@ class Settings(BaseSettings):
         description="Default httpx request timeout in seconds",
     )
     max_retry_attempts: int = Field(
-        default=3,
+        default=5,
         ge=1,
         le=10,
-        description="Maximum retry attempts for external API calls before giving up",
+        description="Maximum retry attempts for external API calls before giving up (R10: max 5)",
+    )
+
+    exploitdb_refresh_hours: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "How often (in hours) the Exploit-DB CSV manifest is refreshed in memory. "
+            "First download happens at startup; subsequent downloads every N hours."
+        ),
     )
     retry_base_delay_seconds: float = Field(
         default=1.0,

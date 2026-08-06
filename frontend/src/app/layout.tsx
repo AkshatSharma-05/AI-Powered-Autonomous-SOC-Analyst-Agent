@@ -1,4 +1,4 @@
-w/*
+/*
  * frontend/src/app/layout.tsx
  * Root layout — wraps all pages with ClerkProvider for authentication context.
  * ClerkProvider must be at the root level to make auth available everywhere.

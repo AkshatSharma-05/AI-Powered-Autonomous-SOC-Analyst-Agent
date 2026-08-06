@@ -3,13 +3,13 @@ backend/models/cve.py
 ─────────────────────────────────────────────────────────────────────────────
 SQLAlchemy ORM model for the `cve` table.
 
-Spec R3 schema:
+V0 schema (R3):
     cve_id (PK), cvss_score, published_date, description,
     stix_data (JSONB), created_at
 
-The `stix_data` column stores the full STIX 2.1 bundle JSON produced by
-Agent A1 after normalisation.  Using JSONB (not JSON) gives us indexing
-support and faster query operators in PostgreSQL.
+V1.0 additions (migration 002):
+    source, cpe_uris (JSONB), exploit_status, risk_score,
+    matched_asset_hostnames (JSONB)
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -70,6 +70,40 @@ class CVE(Base):
         comment="Full STIX 2.1 bundle JSON produced by A1's normaliser",
     )
 
+    # ── V1.0 additions ────────────────────────────────────────────────────────
+
+    source: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Ingestion source: 'nvd' | 'osv' | 'github_advisory'",
+    )
+
+    cpe_uris: Mapped[list[str] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="List of affected CPE 2.3 URI strings extracted from NVD/OSV",
+    )
+
+    exploit_status: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="None",
+        comment="Denormalized exploit status from A3: None|PoC Exists|Weaponised|Actively Exploited",
+    )
+
+    risk_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        default=0.0,
+        comment="Denormalized composite risk score: CVSS × exposure_multiplier × exploit_factor",
+    )
+
+    matched_asset_hostnames: Mapped[list[str] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Denormalized list of asset hostnames matched by A2",
+    )
+
     # ── Audit ─────────────────────────────────────────────────────────────────
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -79,4 +113,7 @@ class CVE(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<CVE id={self.cve_id!r} cvss={self.cvss_score}>"
+        return (
+            f"<CVE id={self.cve_id!r} cvss={self.cvss_score} "
+            f"exploit={self.exploit_status!r} risk={self.risk_score}>"
+        )
