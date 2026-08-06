@@ -21,6 +21,7 @@ interface AssetPanelProps {
   exploitStatus: ExploitStatus;
   riskScore: number;
   description?: string;
+  publishedDate?: string;
   isKevListed?: boolean;
   assets: AssetDetail[];
   onClose: () => void;
@@ -38,10 +39,32 @@ export default function AssetPanel({
   exploitStatus,
   riskScore,
   description,
+  publishedDate,
   isKevListed,
   assets,
   onClose,
 }: AssetPanelProps) {
+  const formattedDate = publishedDate
+    ? new Date(publishedDate).toLocaleString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      })
+    : null;
+
+  const relativeDate = publishedDate
+    ? (() => {
+        const delta = (Date.now() - new Date(publishedDate).getTime()) / 1000;
+        if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+        if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+        if (delta < 86400 * 30) return `${Math.floor(delta / 86400)}d ago`;
+        if (delta < 86400 * 365) return `${Math.floor(delta / (86400 * 30))}mo ago`;
+        return `${Math.floor(delta / (86400 * 365))}y ago`;
+      })()
+    : null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
@@ -55,7 +78,7 @@ export default function AssetPanel({
         {/* Header */}
         <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-white/10 px-6 py-4 flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1.5">
               <h2 className="text-lg font-bold text-white font-mono">{cveId}</h2>
               {isKevListed && (
                 <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/40 px-2 py-0.5 rounded-full font-semibold">
@@ -63,7 +86,18 @@ export default function AssetPanel({
                 </span>
               )}
             </div>
-            <ExploitBadge status={exploitStatus} />
+            <div className="flex items-center gap-3 flex-wrap">
+              <ExploitBadge status={exploitStatus} />
+              {formattedDate && (
+                <span className="text-xs text-slate-500">
+                  Published{" "}
+                  <span className="text-slate-300 font-medium">{formattedDate}</span>
+                  {relativeDate && (
+                    <span className="text-slate-600 ml-1">({relativeDate})</span>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -159,38 +193,84 @@ export default function AssetPanel({
             )}
           </div>
 
-          {/* Links */}
+          {/* References */}
           <div>
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
               References
             </h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
+
+              {/* NVD */}
               <a
                 href={`https://nvd.nist.gov/vuln/detail/${cveId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors"
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-white/3 px-4 py-3 hover:bg-white/6 hover:border-white/15 transition-all group"
               >
-                NVD →
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-7 h-7 rounded-md bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">NVD</p>
+                    <p className="text-xs text-slate-500 truncate">National Vulnerability Database · NIST</p>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
               </a>
+
+              {/* CVE.org */}
               <a
                 href={`https://www.cve.org/CVERecord?id=${cveId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors"
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-white/3 px-4 py-3 hover:bg-white/6 hover:border-white/15 transition-all group"
               >
-                CVE.org →
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-7 h-7 rounded-md bg-violet-500/15 border border-violet-500/25 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-200 group-hover:text-white transition-colors">CVE.org</p>
+                    <p className="text-xs text-slate-500 truncate">Official CVE Record · MITRE Corporation</p>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
               </a>
+
+              {/* CISA KEV — only if listed */}
               {isKevListed && (
                 <a
                   href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-red-400 hover:text-red-300 underline underline-offset-2 transition-colors"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-red-500/25 bg-red-500/5 px-4 py-3 hover:bg-red-500/10 hover:border-red-500/40 transition-all group"
                 >
-                  CISA KEV →
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-7 h-7 rounded-md bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-red-300 group-hover:text-red-200 transition-colors">CISA KEV Catalog</p>
+                      <p className="text-xs text-red-400/70 truncate">Confirmed actively exploited in the wild</p>
+                    </div>
+                  </div>
+                  <svg className="w-4 h-4 text-red-500/50 group-hover:text-red-400 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
                 </a>
               )}
+
             </div>
           </div>
         </div>

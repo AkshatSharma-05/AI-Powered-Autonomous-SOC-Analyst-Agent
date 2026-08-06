@@ -39,6 +39,7 @@ interface SelectedCVE {
   exploitStatus: ExploitStatus;
   riskScore: number;
   description?: string;
+  publishedDate?: string;
   isKevListed?: boolean;
   assets: AssetDetail[];
 }
@@ -266,6 +267,7 @@ export default function DashboardPage() {
         exploitStatus: cve.exploit_status,
         riskScore: cve.risk_score,
         description: cve.description,
+        publishedDate: cve.published_date,
         isKevListed: cve.is_kev_listed,
         assets: data.matched_assets ?? [],
       });
@@ -645,14 +647,19 @@ export default function DashboardPage() {
                         )}
                       </td>
 
-                      {/* Published — relative with absolute on hover */}
+                      {/* Published — relative time with custom CSS tooltip on hover */}
                       <td className="px-3 py-3.5">
-                        <span
-                          className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-default"
-                          title={absoluteDate(cve.published_date)}
-                        >
-                          {relativeTime(cve.published_date)}
-                        </span>
+                        <div className="relative group/date inline-block">
+                          <span className="text-xs text-slate-500 group-hover/date:text-slate-300 transition-colors cursor-default">
+                            {relativeTime(cve.published_date)}
+                          </span>
+                          {cve.published_date && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-slate-800 border border-white/10 text-xs text-slate-200 rounded-lg whitespace-nowrap opacity-0 group-hover/date:opacity-100 transition-opacity duration-150 pointer-events-none z-50 shadow-xl">
+                              {absoluteDate(cve.published_date)}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-slate-800" />
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Source */}
@@ -734,6 +741,7 @@ export default function DashboardPage() {
           exploitStatus={selectedCVE.exploitStatus}
           riskScore={selectedCVE.riskScore}
           description={selectedCVE.description}
+          publishedDate={selectedCVE.publishedDate}
           isKevListed={selectedCVE.isKevListed}
           assets={selectedCVE.assets}
           onClose={() => setSelectedCVE(null)}
