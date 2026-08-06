@@ -14,144 +14,132 @@ This is a B.Tech Computer Science major project (KIET Group of Institutions, AY 
 1. Continuously ingests new CVEs from NVD, OSV.dev, and GitHub Security Advisories the moment they're published.
 2. Checks whether the organization's actual infrastructure is affected — filtering out the 80–90% of CVEs that are irrelevant. This is what makes the LLM step affordable, so it must run *before* any LLM call.
 3. Checks whether a real-world exploit already exists (CISA KEV catalogue, Exploit-DB, GitHub PoC code).
-4. If relevant, an LLM (Claude Sonnet 4.6) reasons over all this context and generates a structured, validated remediation plan (patch order, workarounds, rollback steps, downtime estimate).
+4. If relevant, an LLM (Claude Sonnet 4.6 / Gemini) reasons over all this context and generates a structured, validated remediation plan (patch order, workarounds, rollback steps, downtime estimate).
 5. A human analyst approves/rejects high-impact actions via a dashboard (LangGraph interrupt checkpoint, 4-hour auto-escalation timeout).
 6. On approval, the system auto-creates a JIRA ticket, sends Slack/email alerts, and later produces weekly executive PDF reports.
 
 ### System Architecture — Five Agents
 
-| Agent | Name | Responsibility |
-|---|---|---|
-| **A1** | CVE Ingestion | Poll NVD API v2, OSV.dev, GitHub Advisory DB every 15 min. Dedup by CVE ID. Normalize to STIX 2.1. Push to Redis queue. Retry + exponential backoff on failures. |
-| **A2** | Asset Correlator | Match incoming CVEs against a live infra inventory. Exact match via CPE 2.3 URI against NVD dictionary; fallback fuzzy match via Jaccard coefficient (threshold 0.80) on vendor/product/version tokens. Log unresolved matches for manual review (never silently discard). Apply exposure scoring (3× multiplier for internet-facing assets). This is the step that discards ~80–90% of CVEs before the LLM ever runs — it exists specifically to control LLM cost. |
-| **A3** | Exploit Intelligence | Query CISA KEV, Exploit-DB API, GitHub Code Search API (for PoC commits by CVE ID). Score by recency (last 48h = highest) and type (weaponized > PoC > theoretical). Output status: `None` / `PoC Exists` / `Weaponised` / `Actively Exploited`. |
-| **A4** | Remediation Planner | The system's only true reasoning agent — a LangGraph ReAct node. Builds a structured prompt from A1–A3 context, calls Claude Sonnet 4.6, gets back a structured JSON patch plan, validates it against a Pydantic schema. Implements a LangGraph interrupt checkpoint before any production-affecting action. Stores the full reasoning trace for auditability. |
-| **A5** | Auto-Reporter | JIRA REST API ticket creation, Slack webhook alerts (routed by team), SMTP email, weekly executive PDF (Claude Sonnet 4.6 + ReportLab), STIX/TAXII 2.1 export for SIEM integration. |
+| Agent | Name | Responsibility | Status |
+|---|---|---|---|
+| **A1** | CVE Ingestion | Poll NVD API v2, OSV.dev, GitHub Advisory DB every 15 min. Dedup by CVE ID. Normalize to STIX 2.1. Push to Redis queue. Retry + exponential backoff on failures. | ✅ **COMPLETED (V1.0)** |
+| **A2** | Asset Correlator | Match incoming CVEs against a live infra inventory. Exact match via CPE 2.3 URI against NVD dictionary; fallback fuzzy match via Jaccard coefficient (threshold 0.80) on vendor/product/version tokens. Log unresolved matches for manual review (never silently discard). Apply exposure scoring (3× multiplier for internet-facing assets). This step discards ~80–90% of CVEs before the LLM ever runs. | ✅ **COMPLETED (V1.0)** |
+| **A3** | Exploit Intelligence | Query CISA KEV, Exploit-DB, GitHub Code Search API (for PoC commits by CVE ID). Output status: `None` / `PoC Exists` / `Weaponised` / `Actively Exploited`. Compute composite risk score: `CVSS base score × exposure multiplier × exploit factor`. | ✅ **COMPLETED (V1.0)** |
+| **A4** | Remediation Planner | The system's reasoning agent — a LangGraph ReAct node. Builds a structured prompt from A1–A3 context, calls LLM, gets back a structured JSON patch plan, validates it against a Pydantic schema. Implements a LangGraph interrupt checkpoint before any production-affecting action. Stores full reasoning trace. | ⏳ **ACTIVE MILESTONE (V2.0)** |
+| **A5** | Auto-Reporter | JIRA REST API ticket creation, Slack webhook alerts, SMTP email, weekly executive PDF (ReportLab), STIX/TAXII 2.1 export for SIEM integration. | 🔮 **UPCOMING (V3.0)** |
 
 **Composite risk scoring formula:** `CVSS base score × exposure multiplier × exploit factor`
 
 **Orchestration:** LangGraph — stateful multi-agent graph, conditional edges, interrupt/resume logic for human-in-the-loop approval.
 
-### Tech Stack (fixed — do not substitute)
+### Tech Stack
 
-- **Backend:** Python, FastAPI (REST + WebSocket server)
-- **Orchestration:** LangGraph
-- **LLM:** Claude Sonnet 4.6 API — single-provider architecture, structured JSON outputs validated with Pydantic
-- **Database:** PostgreSQL
-- **Queue:** Redis
-- **Scheduling:** APScheduler (15-min polling jobs)
-- **Frontend:** Next.js 15 (App Router), Clerk for auth (Admin / Analyst / Read-only roles), WebSocket for live updates, Recharts for gauges/charts
-- **Infra:** Docker Compose (all services containerized), GitHub Actions CI (lint + test on push)
+- **Backend:** Python 3.12, FastAPI (REST + WebSocket server)
+- **Orchestration:** LangGraph, APScheduler (polling jobs & background queues)
+- **LLM Engine:** Claude Sonnet 4.6 / Gemini API — structured JSON outputs validated with Pydantic
+- **Database & Queue:** PostgreSQL (JSONB STIX storage), Redis 7 (LPUSH/BRPOP queue & cursor tracking)
+- **Frontend:** Next.js 16 (App Router + Turbopack), Clerk for auth, WebSockets for live feed, Tailwind CSS
+- **Infra:** Docker Compose (all services containerized), Alembic migrations
 - **Data formats:** STIX 2.1 (normalization), STIX/TAXII 2.1 (export)
-
-### Team & Ownership
-
-| Person | Role | Owns |
-|---|---|---|
-| Member 1 | Pipeline Engineer | A1 + A3, Postgres schema design, Redis queue setup, APScheduler, API key management |
-| Member 2 | AI/Reasoning Engineer | A2 + A4, composite risk scoring, LangGraph orchestration graph, Pydantic schemas, asset inventory seeding |
-| Member 3 | Platform Engineer | A5 + Dashboard + Infra: FastAPI endpoints/WebSocket, Next.js dashboard, Docker Compose, CI pipeline, secrets management |
-
-Each person owns a complete vertical slice so no one is blocked by anyone else.
-
-### Branching Convention
-
-```
-main  ← clean, demo-ready, only touched at milestones
-dev   ← integration branch, everyone merges here first
-  ├── feature/a1-ingestion
-  ├── feature/a3-exploit
-  ├── feature/a2-correlator
-  ├── feature/a4-planner
-  ├── feature/a5-reporter
-  └── feature/dashboard
-```
-
-Commit prefixes: `feat:`, `fix:`, `chore:` (optionally `docs:`, `refactor:`). Shared files that cause conflicts — `backend/main.py`, `backend/agents/pipeline.py`, `backend/agents/state.py`, `requirements.txt` — should be edited by one person at a time.
-
-### The 5 Benchmark CVEs (used for testing throughout the project, not needed until V1.0+)
-
-- CVE-2021-44228 (Apache Log4j, CVSS 10.0)
-- CVE-2024-3094 (xz-utils, CVSS 10.0)
-- CVE-2021-26855 (Microsoft Exchange, CVSS 9.8, KEV-listed)
-- CVE-2022-0847 (Linux Kernel "Dirty Pipe", CVSS 7.8, weaponized exploit despite medium score)
-- CVE-2023-44487 (HTTP/2 Rapid Reset, CVSS 7.5)
 
 ---
 
 ## 2. Current Milestone
 
-**Version 0 — Skeleton.** Goal: everyone has a working local environment and the project skeleton exists. This is the all-hands, unblock-everything milestone. Nothing else in the roadmap (V1.0 ingestion pipeline, V2.0 intelligence + LLM, V3.0 full integrations) can start until this is done and verified.
+**Version 2.0 — LLM Remediation Planner (Agent A4) & Human Approval Checkpoint.**
+
+> **V0 (Skeleton)** and **V1.0 (Live CVE Ingestion, Asset Correlation & Exploit Intelligence)** are fully completed, verified, and merged into `main`.
+
+**V2.0 Goal:** An ingested CVE with `risk_score > 15` is automatically processed by Agent A4 (LLM Planner), generating a structured patch plan with rollback steps and downtime estimates. High-impact plans enter a LangGraph `interrupt` checkpoint requiring human approval on the dashboard before execution/reporting.
 
 ---
 
-## 3. Constitution (non-negotiable constraints — apply to every task, every milestone)
+## 3. Constitution (non-negotiable constraints — apply to every task)
 
 - Tech stack is fixed as specified in Section 1. No substitutions.
-- Every service runs in a container from the start. Nothing is "local-only for now."
-- Secrets never get hardcoded or committed. `.env` is in `.gitignore` from the first commit.
-- Code must be commented — this project is also evaluated on code quality and feeds a research paper.
+- Every service runs in a container from the start.
+- Secrets never get hardcoded or committed. `.env` is in `.gitignore`.
+- Code must be commented — this project is evaluated on code quality and feeds a research paper.
 - Don't build ahead of the current milestone's scope (see Section 6, Out of Scope).
-- After each task below, stop and verify it against Section 5 before moving to the next — don't chain untested work together.
-- If a decision isn't covered by this spec (e.g. exact folder layout, exact Pydantic field naming beyond what's specified), ask rather than guess silently. Don't ask about anything already specified here.
+- Verify every task against Section 5's acceptance checks before declaring completion.
 
 ---
 
-## 4. Requirements for Version 0 (EARS format)
+## 4. System Requirements
 
-**R1 — Environment startup**
-WHEN a developer runs `docker compose up`, THE SYSTEM SHALL start the backend, PostgreSQL, and Redis containers and report all three as healthy within 30 seconds.
+### Version 0 — Infrastructure Skeleton (COMPLETED ✅)
 
-**R2 — Health check**
-WHEN a client sends `GET /health` to the backend, THE SYSTEM SHALL respond with HTTP 200 and a JSON body `{"status": "ok"}`.
-
-**R3 — Schema availability**
-WHEN the PostgreSQL container starts for the first time, THE SYSTEM SHALL create the `cve`, `asset`, and `pipeline_state` tables automatically (via migration or init script — not a manual step).
-
-- `cve`: cve_id (PK), cvss_score, published_date, description, stix_data (JSONB), created_at
-- `asset`: id (PK), hostname, ip_address, cpe_string, zone, is_internet_facing (bool)
-- `pipeline_state`: id (PK), cve_id (FK), stage, status, updated_at
-
-**R4 — Queue round-trip**
-WHEN a test script pushes a message to the Redis queue, THE SYSTEM SHALL allow a consumer to pop that exact message back, confirming producer/consumer connectivity.
-
-**R5 — Seeded inventory**
-WHEN the asset seed script is run, THE SYSTEM SHALL insert exactly 10 asset records across 3 distinct network zones, each with a syntactically valid CPE 2.3 URI (e.g. `cpe:2.3:a:apache:log4j:2.14.1:*:*:*:*:*:*:*`).
-
-**R6 — Dashboard auth**
-WHEN an unauthenticated user visits the dashboard, THE SYSTEM SHALL redirect them to a Clerk-hosted login page. WHEN a user authenticates successfully, THE SYSTEM SHALL redirect them to the (blank) dashboard home route.
-
-**R7 — LangGraph scaffold**
-THE SYSTEM SHALL define a shared Pydantic state object representing: cve_id, cvss_score, matched_assets (list), exploit_status, risk_score — importable by all future agent nodes, with no agent logic implemented yet.
+- **R1 — Environment startup:** `docker compose up` starts backend, PostgreSQL, and Redis as healthy within 30s.
+- **R2 — Health check:** `GET /health` returns HTTP 200 `{"status": "ok"}`.
+- **R3 — Schema availability:** PostgreSQL creates `cve`, `asset`, and `pipeline_state` tables automatically.
+- **R4 — Queue round-trip:** Producer/consumer round-trip connectivity verified on Redis queue.
+- **R5 — Seeded inventory:** `seed_assets.py` inserts 10 assets across 3 distinct zones with valid CPE 2.3 URIs.
+- **R6 — Dashboard auth:** Clerk auth integration routes unauthenticated users to login.
+- **R7 — LangGraph scaffold:** Shared Pydantic state schema created.
 
 ---
 
-## 5. Acceptance Criteria per Task
+### Version 1.0 — Ingestion, Correlation, Exploit Intel & Realtime Dashboard (COMPLETED ✅)
 
-| Task | Acceptance check |
-|---|---|
-| docker-compose.yml | `docker compose up` exits 0 on all three services; `docker compose ps` shows all three as `running`/`healthy` |
-| FastAPI health endpoint | `curl localhost:8000/health` returns `{"status":"ok"}` with 200 |
-| Postgres schema | Connecting with any client and running `\dt` shows `cve`, `asset`, `pipeline_state` |
-| Redis round-trip | A script pushes `"test-cve-001"`, a second call pops it, values match exactly |
-| Seed script | `SELECT COUNT(*) FROM asset;` returns 10; `SELECT DISTINCT zone FROM asset;` returns 3 rows |
-| Next.js + Clerk | Visiting `/` while logged out shows Clerk login; logging in reaches a dashboard route without console errors |
-| LangGraph state scaffold | State object importable in a Python REPL with no errors; fields match R7 exactly |
-
-**Definition of done for V0:** all 7 checks above pass. At that point, commit to `dev` and stop — do not proceed to Section 6 items until told to.
-
----
-
-## 6. Out of Scope for Version 0 (do not build these yet)
-
-- Any real NVD/OSV/GitHub API calls (that's A1, next milestone: V1.0)
-- Any CPE matching logic (that's A2, V1.0)
-- Any Claude API / LLM calls (that's A4, V2.0)
-- Any JIRA/Slack/email integration (that's A5, V3.0)
-- Any real dashboard data — CVE feed table and risk gauges arrive in V1.0/V2.0
+- **R8 — NVD API v2 poller (`nvd_client.py`):** Incremental poll using `lastModStartDate`/`lastModEndDate` with cursor stored in Redis (`poll:last:nvd`). Paginates 100/page with mandatory 6s inter-page rate limit.
+- **R9 — OSV + GitHub Advisory pollers:** Package-scoped OSV lookups per asset CPE (`osv_client.py`) and GraphQL GitHub Advisory poll (`github_advisory_client.py`).
+- **R10 — Resilient HTTP client (`http_client.py`):** Exponential backoff + full jitter, 5 retries on 429/5xx, timeout handling.
+- **R11 — STIX 2.1 normalisation (`stix_normaliser.py`):** Vulnerability SDOs (deterministic `uuid5(NAMESPACE, cve_id)`) + Software SCOs stored in `cve.stix_data` (JSONB).
+- **R12 — Redis pipeline queue (`redis_client.py`):** `LPUSH` on ingestion, `BRPOP` consumer loop in `pipeline.py`.
+- **R13 — Exact CPE match (`correlator.py`):** `vendor:product` exact matching between CVE CPE URIs and asset CPE strings.
+- **R14 — Fuzzy CPE match (`cpe_utils.py`):** Tokenized Jaccard similarity ($J(A, B) \ge 0.80$) fallback for non-exact matches.
+- **R15 — Skip no-match CVEs:** Unmatched CVEs marked `skipped` in `pipeline_state` to optimize downstream resources.
+- **R16 — Exposure multiplier:** 3.0× multiplier for DMZ/Cloud internet-facing assets (`is_internet_facing = true`), 1.0× for internal assets.
+- **R17 — GET /cves endpoint (`cve_router.py`):** Paginated, ordered by `published_date DESC`, filterable by `exploit_status` and `min_cvss`.
+- **R18 — GET /cves/{cve_id}/matches endpoint (`cve_router.py`):** Returns matched assets with zone, match type, exposure multiplier, and IP.
+- **R19 — WebSocket live push (`ws_manager.py` / `ws_router.py`):** `WS /ws/cves` broadcasts `cve_processed` events to connected dashboard clients.
+- **R20 — Dashboard rendering (`page.tsx`):** Next.js 16 dashboard table with live auto-prepend, stats bar, filter tabs, and slide-out asset panel.
+- **R21 — Benchmark demo & Manual CVE Injection (`POST /pipeline/inject/{cve_id}`):** Single-item NVD lookup by ID without time-window restrictions. Injected Log4Shell (`CVE-2021-44228`) matched `app-server-01` (DMZ, 3.0×), tagged `Actively Exploited` (KEV 2.0×), computed risk score `60.0`, and broadcasted via WebSockets in ~5 seconds (< 30s spec limit).
+- **R22 — CISA KEV integration (`kev_client.py`):** In-memory catalog of 1,661+ entries, 1h cache, O(1) membership check.
+- **R23 — Exploit-DB search (`exploitdb_client.py`):** Full offline search across 47,100+ exploits via 6h cached CSV data.
+- **R24 — GitHub PoC search (`github_poc_client.py`):** GitHub Code Search for public proof-of-concept repositories with recency evaluation.
+- **R25 — 4-Tier exploit classification & risk formula:** Tiers: `Actively Exploited` (2.0×), `Weaponised` (1.5×), `PoC Exists` (1.2×), `None` (1.0×). Formula: $\text{CVSS} \times \text{Exposure} \times \text{Exploit Factor}$.
+- **R26 — Exploit status dashboard components:** `ExploitBadge.tsx` (4-tier color pills), `RiskScore.tsx` (score bar), `AssetPanel.tsx` (slide-out panel).
 
 ---
 
-## 7. What Comes Next (context only — not to be built now)
+### Version 2.0 — Remediation Planner & Approval Checkpoint (ACTIVE ⏳)
 
-After V0 is verified, the next milestone (V1.0, mid-term demo) is: live CVE ingestion (A1) → asset correlation (A2) → basic dashboard CVE feed, demoed by injecting CVE-2021-44228 (Log4Shell) and showing it match the simulated Java server on the dashboard with a risk score, live, timed. When that milestone starts, this file should be updated with a new Section 2 (Current Milestone), Section 4 (Requirements), and Section 5 (Acceptance Criteria) for V1.0 — append rather than overwrite Sections 1 and 3, which stay constant across the whole project.
+- **R27 — Agent A4 LLM Remediation Planner:** Evaluates high-risk correlated CVEs (`risk_score > 15`) using LLM (Claude Sonnet 4.6 / Gemini) with structured Pydantic schema outputs.
+- **R28 — Remediation Plan Schema:** Includes patch version recommendation, step-by-step mitigation, CLI/Ansible commands, rollback steps, downtime estimate (minutes), and impact assessment.
+- **R29 — LangGraph Interrupt Checkpoint:** Pauses state execution before high-risk remediation actions, routing the plan to a human approval queue.
+- **R30 — Dashboard Approvals UI:** Next.js dashboard tab for SOC analysts to review, approve, reject, or comment on pending remediation plans.
+- **R31 — Audit Log & State Persistence:** Complete reasoning traces, model parameters, and approval decisions stored in `pipeline_state` for regulatory compliance.
+
+---
+
+## 5. Acceptance Criteria & Status
+
+| Task / Feature | Acceptance Check | Status |
+|---|---|---|
+| Infrastructure Docker | `docker compose up` starts Postgres, Redis, Backend, Frontend healthy | ✅ PASS |
+| DB Schema & Migrations | Migration `002_add_v1_schema.py` creates `cve`, `asset`, `pipeline_state`, `cve_asset_match` | ✅ PASS |
+| Asset Seed Inventory | 10 assets seeded across 3 zones (`dmz`, `cloud`, `internal`) with CPE 2.3 URIs | ✅ PASS |
+| A1 Ingestion Pipeline | Multi-source poll (NVD, OSV, GitHub Advisory) produces STIX 2.1 JSONB in DB | ✅ PASS |
+| A2 Asset Correlator | Exact CPE match + Jaccard fuzzy ($\ge 0.80$) attaches assets with 3.0× / 1.0× multipliers | ✅ PASS |
+| A3 Exploit Intelligence | CISA KEV (1,661 entries) + Exploit-DB (47k entries) + GitHub PoC tag 4 tiers & score risk | ✅ PASS |
+| REST & WS API | `GET /cves`, `GET /cves/{id}/matches`, `POST /pipeline/inject/{cve_id}`, `WS /ws/cves` operational | ✅ PASS |
+| Dashboard Frontend | Next.js 16 dashboard renders live table, risk progress bars, filters, and slide-out asset panel | ✅ PASS |
+| R21 Demo Checkpoint | Log4Shell (`CVE-2021-44228`) injected $\rightarrow$ `app-server-01`, `Actively Exploited`, risk `60.0` in ~5s | ✅ PASS |
+| A4 Remediation Planner | LLM produces validated remediation plan JSON for high-risk CVEs | ⏳ IN PROGRESS |
+| LangGraph Interrupt | State pauses before action; approval UI renders pending plans | ⏳ IN PROGRESS |
+
+---
+
+## 6. Out of Scope for Version 2.0 (Deferred to V3.0)
+
+- Automated JIRA ticket generation (A5)
+- Slack webhook alert notifications & email dispatch (A5)
+- Executive PDF report generation via ReportLab (A5)
+- External TAXII 2.1 server feed publishing (A5)
+
+---
+
+## 7. What Comes Next (V3.0 Preview)
+
+After Version 2.0 (LLM Planning & Approvals) is completed and verified, **Version 3.0 (Full Integrations & Executive Reporting)** will introduce Agent A5 to execute approved remediation actions, open JIRA tickets, trigger Slack notifications, and compile weekly PDF executive reports for CISOs.
