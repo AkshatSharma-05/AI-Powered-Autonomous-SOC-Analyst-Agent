@@ -17,10 +17,11 @@ Spec R7 required fields (exact naming):
 All agents import this class:
     from backend.agents.state import PipelineState
 
-V0 note: No agent logic is implemented yet — this file is the scaffold only.
-         Agent nodes (A1–A5) will be added in V1.0–V3.0 milestones.
+V1.0 additions:
+    description, published_date, cpe_uris, exposure_multiplier,
+    exploit_factor, is_kev_listed
 
-Composite risk formula (implemented in A2, V1.0):
+Composite risk formula (R16, R25):
     risk_score = cvss_score × exposure_multiplier × exploit_factor
 
     exposure_multiplier:
@@ -37,14 +38,13 @@ Composite risk formula (implemented in A2, V1.0):
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from datetime import datetime
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ── Exploit status literals ────────────────────────────────────────────────────
-# These are the four possible exploit intelligence outcomes from Agent A3.
-# Using a Literal type enforces that only valid values can be set.
 ExploitStatus = Literal["None", "PoC Exists", "Weaponised", "Actively Exploited"]
 
 
@@ -53,15 +53,11 @@ class PipelineState(BaseModel):
     Shared state object flowing through the LangGraph pipeline.
 
     Populated incrementally as each agent runs:
-        A1 (Ingestion)     → sets cve_id, cvss_score
+        A1 (Ingestion)     → sets cve_id, cvss_score, description, cpe_uris
         A2 (Correlator)    → sets matched_assets, exposure_multiplier, risk_score (partial)
-        A3 (Exploit Intel) → sets exploit_status, risk_score (final)
+        A3 (Exploit Intel) → sets exploit_status, exploit_factor, risk_score (final)
         A4 (Planner)       → sets remediation_plan (added in V2.0)
         A5 (Reporter)      → sets ticket_url, alert_sent (added in V3.0)
-
-    V0: only the fields required by spec R7 are defined here.
-        Additional fields will be added in later milestones without breaking
-        existing code (Pydantic ignores unknown fields by default).
     """
 
     # ── R7 required fields (exact names from spec) ────────────────────────────
@@ -111,12 +107,51 @@ class PipelineState(BaseModel):
         ),
     )
 
+    # ── V1.0 additions ────────────────────────────────────────────────────────
+
+    description: Optional[str] = Field(
+        default=None,
+        description="English language vulnerability description from NVD/OSV",
+    )
+
+    published_date: Optional[datetime] = Field(
+        default=None,
+        description="UTC timestamp when the CVE was first published",
+    )
+
+    cpe_uris: list[str] = Field(
+        default_factory=list,
+        description="List of affected CPE 2.3 URI strings extracted from NVD",
+    )
+
+    exposure_multiplier: float = Field(
+        default=1.0,
+        ge=1.0,
+        le=3.0,
+        description=(
+            "Exposure multiplier set by A2: 3.0 if any matched asset is "
+            "internet-facing, 1.0 otherwise"
+        ),
+    )
+
+    exploit_factor: float = Field(
+        default=1.0,
+        ge=1.0,
+        le=2.0,
+        description=(
+            "Exploit factor set by A3: 2.0/1.5/1.2/1.0 corresponding to "
+            "Actively Exploited / Weaponised / PoC Exists / None"
+        ),
+    )
+
+    is_kev_listed: bool = Field(
+        default=False,
+        description="True if the CVE is listed in the CISA KEV catalogue",
+    )
+
     # ── Model configuration ───────────────────────────────────────────────────
     model_config = {
-        # Allow extra fields — future milestones will add remediation_plan, ticket_url, etc.
-        # This prevents breaking changes when V2.0/V3.0 extend the state.
         "extra": "allow",
-        # Enable JSON schema generation for LangGraph state introspection
         "json_schema_extra": {
             "example": {
                 "cve_id": "CVE-2021-44228",
@@ -124,6 +159,9 @@ class PipelineState(BaseModel):
                 "matched_assets": ["app-server-01"],
                 "exploit_status": "Actively Exploited",
                 "risk_score": 60.0,
+                "exposure_multiplier": 3.0,
+                "exploit_factor": 2.0,
+                "is_kev_listed": True,
             }
         },
     }
