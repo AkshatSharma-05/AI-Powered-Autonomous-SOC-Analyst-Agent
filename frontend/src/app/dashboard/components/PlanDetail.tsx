@@ -45,10 +45,14 @@ export default function PlanDetail({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const copyToClipboard = (cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedCommand(cmd);
-    setTimeout(() => setCopiedCommand(null), 2000);
+  const copyToClipboard = async (cmd: string) => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopiedCommand(cmd);
+      setTimeout(() => setCopiedCommand(null), 2000);
+    } catch {
+      // Ignore clipboard failures (e.g., unsupported or permission denied)
+    }
   };
 
   const handleApprove = async () => {
