@@ -338,7 +338,7 @@ export function useRemediation() {
   const executePlan = useCallback(
     async (planId: string) => {
       const targetPlan = plans.find((p) => p.id === planId);
-      if (!targetPlan) return;
+      if (!targetPlan || targetPlan.status !== "approved") return;
 
       const now = new Date().toISOString();
       const updatedPlans = plans.map((p) =>
