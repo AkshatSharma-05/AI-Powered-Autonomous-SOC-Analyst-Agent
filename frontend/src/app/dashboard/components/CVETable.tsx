@@ -66,10 +66,10 @@ const CVERow = memo(function CVERow({ cve, isSelected, onRowClick }: CVERowProps
   return (
     <tr
       data-cve-id={cve.cve_id}
-      onClick={() => onRowClick(cve)}
-      tabIndex={0}
+      onClick={() => cve.matched_asset_count > 0 && onRowClick(cve)}
+      tabIndex={cve.matched_asset_count > 0 ? 0 : -1}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (cve.matched_asset_count > 0 && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           onRowClick(cve);
         }
