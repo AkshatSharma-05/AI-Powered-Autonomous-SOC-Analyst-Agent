@@ -16,7 +16,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 
-RUN npm install
+RUN npm ci
 
 
 # ── Stage 2: build the Next.js application ────────────────────────────────────
