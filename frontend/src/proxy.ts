@@ -27,7 +27,6 @@ const isClerkConfigured = !!(pubKey && pubKey.startsWith("pk_") && !pubKey.inclu
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/dashboard(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
