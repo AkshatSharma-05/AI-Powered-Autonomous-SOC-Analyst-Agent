@@ -14,10 +14,9 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Copy package files first for layer caching
 COPY package.json package-lock.json* ./
 
-RUN npm ci --prefer-offline
+RUN npm ci
 
 
 # ── Stage 2: build the Next.js application ────────────────────────────────────
@@ -66,6 +65,6 @@ ENV HOSTNAME="0.0.0.0"
 ENV NEXT_TELEMETRY_DISABLED=1
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:3000 || exit 1
+    CMD wget -qO- http://127.0.0.1:3000 || exit 1
 
 CMD ["node", "server.js"]

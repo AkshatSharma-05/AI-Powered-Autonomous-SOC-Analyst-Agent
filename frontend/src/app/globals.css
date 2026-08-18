@@ -1,8 +1,27 @@
 @import "tailwindcss";
 
-:root {
+/* Tailwind v4 class-based variants */
+@variant dark (&:where(.dark, .dark *));
+@variant light (&:where(.light, .light *));
+
+:root, .dark {
   --background: #020617; /* slate-950 */
   --foreground: #f1f5f9; /* slate-100 */
+  --card-bg: rgba(15, 23, 42, 0.65);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --table-header-bg: rgba(15, 23, 42, 0.85);
+  --panel-bg: rgba(15, 23, 42, 0.95);
+  --muted-text: #64748b;
+}
+
+.light {
+  --background: #f8fafc; /* slate-50 */
+  --foreground: #0f172a; /* slate-900 */
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --card-border: rgba(226, 232, 240, 0.9);
+  --table-header-bg: rgba(241, 245, 249, 0.95);
+  --panel-bg: rgba(255, 255, 255, 0.98);
+  --muted-text: #64748b;
 }
 
 @theme inline {
@@ -17,6 +36,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* ── Slide-in animation for AssetPanel ─────────────────────────────────── */
@@ -49,4 +69,20 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Row flash animation for WebSocket CVE arrivals ──────────────────────── */
+@keyframes rowFlash {
+  0% { background-color: rgba(59,130,246,0.18); }
+  100% { background-color: transparent; }
+}
+
+.row-flash {
+  animation: rowFlash 2s ease-out forwards;
+}
+
+/* ── Focus ring utility ──────────────────────────────────────────────────── */
+.focus-ring:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
 }
