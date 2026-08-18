@@ -8,8 +8,8 @@
  * All data fetching, WebSocket management, and rendering logic has been
  * extracted into custom hooks and focused components:
  *
- *   Hooks:      useCVEFeed, useWebSocket, useDebounce
- *   Components: Header, StatsBar, RiskChart, FilterBar, CVETable, Pagination, AssetPanel
+ *   Hooks:      useCVEFeed, useWebSocket, useDebounce, useRemediation
+ *   Components: Header, StatsBar, RiskChart, FilterBar, CVETable, Pagination, AssetPanel, TabNav
  *   Types:      types/index.ts (shared across all dashboard files)
  *
  * This page composes them into the dashboard layout and handles the few
@@ -26,18 +26,18 @@ import type { CVEItem, ExploitStatus, SelectedCVE } from "./types";
 import { useCVEFeed } from "./hooks/useCVEFeed";
 import { useDebounce } from "./hooks/useDebounce";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { useRemediation } from "./hooks/useRemediation";
 import { useToast } from "../../context/ToastContext";
 
 // Components
-import AssetPanel from "./components/AssetPanel";
-import CVETable from "./components/CVETable";
-import FilterBar from "./components/FilterBar";
 import Header from "./components/Header";
-import Pagination from "./components/Pagination";
-import RiskChart from "./components/RiskChart";
-import StatsBar from "./components/StatsBar";
 import TabNav from "./components/TabNav";
-import { useRemediation } from "./hooks/useRemediation";
+import StatsBar from "./components/StatsBar";
+import RiskChart from "./components/RiskChart";
+import FilterBar from "./components/FilterBar";
+import CVETable from "./components/CVETable";
+import Pagination from "./components/Pagination";
+import AssetPanel from "./components/AssetPanel";
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const PAGE_SIZE = 25;
@@ -140,6 +140,7 @@ export default function DashboardPage() {
           exploitStatus: cve.exploit_status,
           riskScore: cve.risk_score,
           description: cve.description,
+          publishedDate: cve.published_date,
           isKevListed: cve.is_kev_listed,
           assets: data.matched_assets ?? [],
         });
@@ -244,6 +245,7 @@ export default function DashboardPage() {
           exploitStatus={selectedCVE.exploitStatus}
           riskScore={selectedCVE.riskScore}
           description={selectedCVE.description}
+          publishedDate={selectedCVE.publishedDate}
           isKevListed={selectedCVE.isKevListed}
           assets={selectedCVE.assets}
           onClose={() => setSelectedCVE(null)}

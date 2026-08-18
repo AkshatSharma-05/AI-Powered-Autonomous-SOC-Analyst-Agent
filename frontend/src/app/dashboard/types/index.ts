@@ -63,6 +63,7 @@ export interface SelectedCVE {
   exploitStatus: ExploitStatus;
   riskScore: number;
   description?: string;
+  publishedDate?: string;
   isKevListed?: boolean;
   assets: AssetDetail[];
 }
